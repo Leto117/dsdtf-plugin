@@ -70,6 +70,24 @@ figma.ui.onmessage = async (msg: { type: string; files: { name: string; content:
         const parsed = JSON.parse(typography.content)
         const scale = parsed.typeScale || []
 
+        // Collect unique fonts
+        const fontRequests: FontName[] = []
+        const seen = new Set<string>()
+        for (const sd of scale) {
+          const family = sd.fontFamily || 'Inter'
+          const fw = sd.fontWeight || 400
+          let style = 'Regular'
+          if (fw >= 700) style = 'Bold'
+          else if (fw >= 600) style = 'Semi Bold'
+          else if (fw >= 500) style = 'Medium'
+          const key = `${family}::${style}`
+          if (!seen.has(key)) {
+            seen.add(key)
+            fontRequests.push({ family, style })
+          }
+        }
+        await Promise.all(fontRequests.map(f => figma.loadFontAsync(f)))
+
         for (const styleData of scale) {
           try {
             const style = figma.createTextStyle()
@@ -81,13 +99,13 @@ figma.ui.onmessage = async (msg: { type: string; files: { name: string; content:
             style.fontSize = fontSize
             style.lineHeight = { unit: 'PIXELS', value: lineHeightPx }
             style.letterSpacing = { unit: 'PIXELS', value: letterSpacingNum }
-            style.fontName = { family: styleData.fontFamily || 'Inter', style: 'Regular' }
 
-            // Map fontWeight
             const fw = styleData.fontWeight || 400
-            if (fw >= 700) style.fontName = { ...style.fontName, style: 'Bold' }
-            else if (fw >= 600) style.fontName = { ...style.fontName, style: 'Semi Bold' }
-            else if (fw >= 500) style.fontName = { ...style.fontName, style: 'Medium' }
+            let fontStyle = 'Regular'
+            if (fw >= 700) fontStyle = 'Bold'
+            else if (fw >= 600) fontStyle = 'Semi Bold'
+            else if (fw >= 500) fontStyle = 'Medium'
+            style.fontName = { family: styleData.fontFamily || 'Inter', style: fontStyle }
 
             total++
           } catch {}
