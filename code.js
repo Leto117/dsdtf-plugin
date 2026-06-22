@@ -1,161 +1,151 @@
-"use strict";
-figma.showUI(__html__, { width: 380, height: 520, title: 'DSDTF' });
-figma.ui.onmessage = async (msg) => {
-    const data = msg.pluginMessage || msg;
-    if (data.type !== 'import')
-        return;
-    let total = 0;
-    try {
-        const tokens = data.files.find((f) => f.name === 'design-tokens.json');
-        const colors = data.files.find((f) => f.name === 'color-palette.json');
-        const typography = data.files.find((f) => f.name === 'typography.json');
-        if (!tokens && !colors && !typography) {
-            figma.ui.postMessage({ type: 'error', text: 'Не найдены файлы дизайн-системы' });
-            return;
-        }
-        // 1. Color styles
-        figma.notify('Создание цветовых стилей...');
-        figma.ui.postMessage({ type: 'progress', text: 'Создание цветовых стилей...' });
-        const colorStyles = {};
-        if (tokens) {
-            try {
-                const parsed = JSON.parse(tokens.content);
-                if (parsed.colors)
-                    Object.assign(colorStyles, parsed.colors);
-                if (parsed.semantic) {
-                    for (const [key, hex] of Object.entries(parsed.semantic)) {
-                        colorStyles[`semantic/${key}`] = hex;
-                    }
-                }
-            }
-            catch { }
-        }
-        if (colors) {
-            try {
-                const parsed = JSON.parse(colors.content);
-                if (parsed.palettes) {
-                    for (const [name, palette] of Object.entries(parsed.palettes)) {
-                        if (palette === null || palette === void 0 ? void 0 : palette.tones) {
-                            for (const [tone, hex] of Object.entries(palette.tones)) {
-                                colorStyles[`palette/${name}/${tone}`] = hex;
-                            }
-                        }
-                    }
-                }
-            }
-            catch { }
-        }
-        for (const [name, hex] of Object.entries(colorStyles)) {
-            try {
-                const s = figma.createPaintStyle();
-                s.name = name;
-                s.paints = [{ type: 'SOLID', color: hexToRgb(hex), opacity: 1 }];
-                total++;
-            }
-            catch { }
-        }
-        // 2. Text styles
-        if (typography) {
-            figma.notify('Создание текстовых стилей...');
-            figma.ui.postMessage({ type: 'progress', text: 'Создание текстовых стилей...' });
-            try {
-                const parsed = JSON.parse(typography.content);
-                const scale = parsed.typeScale || [];
-                const seen = new Set();
-                const fontReqs = [];
-                for (const sd of scale) {
-                    const family = sd.fontFamily || 'Inter';
-                    const fw = sd.fontWeight || 400;
-                    let style = 'Regular';
-                    if (fw >= 700)
-                        style = 'Bold';
-                    else if (fw >= 600)
-                        style = 'Semi Bold';
-                    else if (fw >= 500)
-                        style = 'Medium';
-                    const key = `${family}::${style}`;
-                    if (!seen.has(key)) {
-                        seen.add(key);
-                        fontReqs.push({ family, style });
-                    }
-                }
-                await Promise.all(fontReqs.map(f => figma.loadFontAsync(f)));
-                for (const sd of scale) {
-                    try {
-                        const s = figma.createTextStyle();
-                        s.name = `${sd.role}/${sd.size}`;
-                        s.fontSize = (parseFloat(sd.fontSize) || 1) * 16;
-                        s.lineHeight = { unit: 'PIXELS', value: (parseFloat(sd.lineHeight) || 1.5) * 16 };
-                        s.letterSpacing = { unit: 'PIXELS', value: parseFloat(sd.letterSpacing) || 0 };
-                        const fw = sd.fontWeight || 400;
-                        let fontStyle = 'Regular';
-                        if (fw >= 700)
-                            fontStyle = 'Bold';
-                        else if (fw >= 600)
-                            fontStyle = 'Semi Bold';
-                        else if (fw >= 500)
-                            fontStyle = 'Medium';
-                        s.fontName = { family: sd.fontFamily || 'Inter', style: fontStyle };
-                        total++;
-                    }
-                    catch { }
-                }
-            }
-            catch { }
-        }
-        // 3. Effect styles
-        if (tokens) {
-            try {
-                const parsed = JSON.parse(tokens.content);
-                const shadows = parsed.shadows || parsed.elevation || {};
-                for (const [name, shadowStr] of Object.entries(shadows)) {
-                    try {
-                        const s = figma.createEffectStyle();
-                        s.name = `shadow/${name}`;
-                        s.effects = [parseShadow(shadowStr)];
-                        total++;
-                    }
-                    catch { }
-                }
-            }
-            catch { }
-        }
-        figma.ui.postMessage({ type: 'done', text: 'Загрузка завершена', count: total });
-        figma.notify(`DSDTF: Создано ${total} стилей`);
-        figma.closePlugin();
+figma.showUI(__html__, { width: 380, height: 460, title: 'DSDTF' })
+
+figma.ui.onmessage = function (msg) {
+  var data = msg.pluginMessage || msg
+  if (data.type !== 'import') return
+
+  var total = 0
+
+  try {
+    var tokens = data.files.find(function (f) { return f.name === 'design-tokens.json' })
+    var colors = data.files.find(function (f) { return f.name === 'color-palette.json' })
+    var typography = data.files.find(function (f) { return f.name === 'typography.json' })
+
+    if (!tokens && !colors && !typography) {
+      figma.ui.postMessage({ type: 'error', text: 'Не найдены файлы дизайн-системы' })
+      return
     }
-    catch (err) {
-        figma.ui.postMessage({ type: 'error', text: String(err) });
-        figma.notify('Ошибка: ' + String(err), { error: true });
+
+    figma.notify('Создание цветовых стилей...')
+    figma.ui.postMessage({ type: 'progress', text: 'Создание цветовых стилей...' })
+
+    var colorStyles = {}
+    if (tokens) {
+      try {
+        var pt = JSON.parse(tokens.content)
+        if (pt.colors) { for (var k in pt.colors) { colorStyles[k] = pt.colors[k] } }
+        if (pt.semantic) { for (var sk in pt.semantic) { colorStyles['semantic/' + sk] = pt.semantic[sk] } }
+      } catch (e) {}
     }
-};
-function hexToRgb(hex) {
-    const h = hex.replace('#', '');
-    return {
-        r: parseInt(h.slice(0, 2), 16) / 255,
-        g: parseInt(h.slice(2, 4), 16) / 255,
-        b: parseInt(h.slice(4, 6), 16) / 255,
-    };
+    if (colors) {
+      try {
+        var pc = JSON.parse(colors.content)
+        if (pc.palettes) {
+          for (var pn in pc.palettes) {
+            var pl = pc.palettes[pn]
+            if (pl && pl.tones) { for (var t in pl.tones) { colorStyles['palette/' + pn + '/' + t] = pl.tones[t] } }
+          }
+        }
+      } catch (e) {}
+    }
+
+    for (var csName in colorStyles) {
+      try {
+        var s = figma.createPaintStyle()
+        s.name = csName
+        s.paints = [{ type: 'SOLID', color: hexToRgb(colorStyles[csName]), opacity: 1 }]
+        total++
+      } catch (e) {}
+    }
+
+    if (typography) {
+      figma.notify('Создание текстовых стилей...')
+      figma.ui.postMessage({ type: 'progress', text: 'Создание текстовых стилей...' })
+
+      try {
+        var pt2 = JSON.parse(typography.content)
+        var scale = pt2.typeScale || []
+
+        var fontReqs = []
+        var seen = {}
+        for (var i = 0; i < scale.length; i++) {
+          var sd = scale[i]
+          var family = sd.fontFamily || 'Inter'
+          var fw = sd.fontWeight || 400
+          var st = 'Regular'
+          if (fw >= 700) st = 'Bold'
+          else if (fw >= 600) st = 'Semi Bold'
+          else if (fw >= 500) st = 'Medium'
+          var key = family + '::' + st
+          if (!seen[key]) { seen[key] = true; fontReqs.push({ family: family, style: st }) }
+        }
+
+        var results = fontReqs.map(function (f) {
+          try { figma.loadFontAsync(f); return true } catch (e) { return false }
+        })
+
+        for (var j = 0; j < scale.length; j++) {
+          try {
+            var sd2 = scale[j]
+            var s2 = figma.createTextStyle()
+            s2.name = sd2.role + '/' + sd2.size
+            s2.fontSize = (parseFloat(sd2.fontSize) || 1) * 16
+            s2.lineHeight = { unit: 'PIXELS', value: (parseFloat(sd2.lineHeight) || 1.5) * 16 }
+            s2.letterSpacing = { unit: 'PIXELS', value: parseFloat(sd2.letterSpacing) || 0 }
+
+            var fw2 = sd2.fontWeight || 400
+            var st2 = 'Regular'
+            if (fw2 >= 700) st2 = 'Bold'
+            else if (fw2 >= 600) st2 = 'Semi Bold'
+            else if (fw2 >= 500) st2 = 'Medium'
+            s2.fontName = { family: sd2.fontFamily || 'Inter', style: st2 }
+            total++
+          } catch (e) {}
+        }
+      } catch (e) {}
+    }
+
+    if (tokens) {
+      try {
+        var ps = JSON.parse(tokens.content)
+        var shadows = ps.shadows || ps.elevation || {}
+        for (var shName in shadows) {
+          try {
+            var s3 = figma.createEffectStyle()
+            s3.name = 'shadow/' + shName
+            s3.effects = [parseShadow(shadows[shName])]
+            total++
+          } catch (e) {}
+        }
+      } catch (e) {}
+    }
+
+    figma.ui.postMessage({ type: 'done', text: 'Загрузка завершена', count: total })
+    figma.notify('DSDTF: Создано ' + total + ' стилей')
+    figma.closePlugin()
+  } catch (err) {
+    figma.ui.postMessage({ type: 'error', text: String(err) })
+    figma.notify('Ошибка: ' + String(err), { error: true })
+  }
 }
+
+function hexToRgb(hex) {
+  var h = hex.replace('#', '')
+  return {
+    r: parseInt(h.slice(0, 2), 16) / 255,
+    g: parseInt(h.slice(2, 4), 16) / 255,
+    b: parseInt(h.slice(4, 6), 16) / 255,
+  }
+}
+
 function parseShadow(shadowStr) {
-    const match = shadowStr.match(/[\d.]+/g);
-    if (match && match.length >= 3) {
-        const [offsetX = 0, offsetY = 2, blur = 4] = match.map(Number);
-        return {
-            type: 'DROP_SHADOW',
-            color: { r: 0, g: 0, b: 0, a: 0.15 },
-            offset: { x: offsetX, y: offsetY },
-            radius: blur,
-            visible: true,
-            blendMode: 'NORMAL',
-        };
-    }
+  var match = shadowStr.match(/[\d.]+/g)
+  if (match && match.length >= 3) {
     return {
-        type: 'DROP_SHADOW',
-        color: { r: 0, g: 0, b: 0, a: 0.1 },
-        offset: { x: 0, y: 2 },
-        radius: 4,
-        visible: true,
-        blendMode: 'NORMAL',
-    };
+      type: 'DROP_SHADOW',
+      color: { r: 0, g: 0, b: 0, a: 0.15 },
+      offset: { x: Number(match[0]) || 0, y: Number(match[1]) || 2 },
+      radius: Number(match[2]) || 4,
+      visible: true,
+      blendMode: 'NORMAL',
+    }
+  }
+  return {
+    type: 'DROP_SHADOW',
+    color: { r: 0, g: 0, b: 0, a: 0.1 },
+    offset: { x: 0, y: 2 },
+    radius: 4,
+    visible: true,
+    blendMode: 'NORMAL',
+  }
 }
