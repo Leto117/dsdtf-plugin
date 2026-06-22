@@ -275,7 +275,6 @@ figma.ui.onmessage = async function (msg) {
 
       figma.ui.postMessage({ type: 'done', text: 'Готово', count: total })
       figma.notify('DSDTF: Создано ' + total + ' стилей + фрейм превью')
-      setTimeout(function () { figma.closePlugin() }, 500)
 
     } catch (e) {
       figma.ui.postMessage({ type: 'error', text: 'Preview: ' + String(e) })
