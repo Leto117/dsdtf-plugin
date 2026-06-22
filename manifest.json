@@ -3,11 +3,11 @@
   "id": "1650876073003435063",
   "api": "1.0.0",
   "main": "code.js",
-  "ui": "ui.html",
+  "ui": "https://leto117.github.io/dsdtf-plugin/ui.html",
   "capabilities": [],
   "editorType": ["figma"],
   "documentAccess": "dynamic-page",
   "networkAccess": {
-    "allowedDomains": ["none"]
+    "allowedDomains": ["https://leto117.github.io"]
   }
 }
