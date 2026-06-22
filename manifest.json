@@ -1,6 +1,6 @@
 {
   "name": "DSDTF",
-  "id": "1650876073003435063",
+  "id": "com.dsdtf.loader",
   "api": "1.0.0",
   "main": "code.js",
   "ui": "ui.html",
