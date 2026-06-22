@@ -1,9 +1,47 @@
 "use strict";
-figma.showUI(__html__, { width: 380, height: 460, title: 'DSDTF' });
+figma.showUI(__html__, { width: 380, height: 520, title: 'DSDTF' });
+// Extract clean font name from CSS stack like '"Epilogue", system-ui, sans-serif' -> 'Epilogue'
+function extractFontName(familyStack) {
+    var _a;
+    if (!familyStack)
+        return 'Inter';
+    const trimmed = familyStack.trim();
+    // Take the first font name — strip quotes if present
+    const firstFont = ((_a = trimmed.split(',')[0]) === null || _a === void 0 ? void 0 : _a.trim().replace(/['"]/g, '')) || 'Inter';
+    return firstFont || 'Inter';
+}
+// Map font weight to Figma style name
+function weightToStyle(fw) {
+    if (fw >= 700)
+        return 'Bold';
+    if (fw >= 600)
+        return 'Semi Bold';
+    if (fw >= 500)
+        return 'Medium';
+    return 'Regular';
+}
+const FALLBACK_FONTS = ['Inter', 'Arial', 'Helvetica', 'system-ui'];
+async function loadFontWithFallback(family, style, loaded) {
+    const key = `${family}::${style}`;
+    if (loaded.has(key))
+        return true;
+    // Try the font, if fails try fallbacks
+    const attempts = [family, ...FALLBACK_FONTS.filter(f => f !== family)];
+    for (const f of attempts) {
+        try {
+            await figma.loadFontAsync({ family: f, style });
+            loaded.add(key);
+            return true;
+        }
+        catch { }
+    }
+    return false;
+}
 figma.ui.onmessage = async (msg) => {
     if (msg.type !== 'import')
         return;
     let total = 0;
+    let fontWarnings = [];
     try {
         // Parse files
         const tokens = msg.files.find(f => f.name === 'design-tokens.json');
@@ -56,33 +94,24 @@ figma.ui.onmessage = async (msg) => {
             }
             catch { }
         }
-        // 2. Create text styles from typography
+        // 2. Create text styles from typography (with font fallback)
         if (typography) {
             figma.notify('Создание текстовых стилей...');
             figma.ui.postMessage({ type: 'progress', text: 'Создание текстовых стилей...' });
             try {
                 const parsed = JSON.parse(typography.content);
                 const scale = parsed.typeScale || [];
-                // Collect unique fonts
-                const fontRequests = [];
-                const seen = new Set();
+                // Pre-load fonts with fallback
+                const loadedFonts = new Set();
                 for (const sd of scale) {
-                    const family = sd.fontFamily || 'Inter';
-                    const fw = sd.fontWeight || 400;
-                    let style = 'Regular';
-                    if (fw >= 700)
-                        style = 'Bold';
-                    else if (fw >= 600)
-                        style = 'Semi Bold';
-                    else if (fw >= 500)
-                        style = 'Medium';
-                    const key = `${family}::${style}`;
-                    if (!seen.has(key)) {
-                        seen.add(key);
-                        fontRequests.push({ family, style });
+                    const rawFamily = sd.fontFamily || 'Inter';
+                    const cleanFamily = extractFontName(rawFamily);
+                    const style = weightToStyle(sd.fontWeight || 400);
+                    const ok = await loadFontWithFallback(cleanFamily, style, loadedFonts);
+                    if (!ok) {
+                        fontWarnings.push(`${cleanFamily} (${style})`);
                     }
                 }
-                await Promise.all(fontRequests.map(f => figma.loadFontAsync(f)));
                 for (const styleData of scale) {
                     try {
                         const style = figma.createTextStyle();
@@ -93,15 +122,13 @@ figma.ui.onmessage = async (msg) => {
                         style.fontSize = fontSize;
                         style.lineHeight = { unit: 'PIXELS', value: lineHeightPx };
                         style.letterSpacing = { unit: 'PIXELS', value: letterSpacingNum };
-                        const fw = styleData.fontWeight || 400;
-                        let fontStyle = 'Regular';
-                        if (fw >= 700)
-                            fontStyle = 'Bold';
-                        else if (fw >= 600)
-                            fontStyle = 'Semi Bold';
-                        else if (fw >= 500)
-                            fontStyle = 'Medium';
-                        style.fontName = { family: styleData.fontFamily || 'Inter', style: fontStyle };
+                        const rawFamily = styleData.fontFamily || 'Inter';
+                        const cleanFamily = extractFontName(rawFamily);
+                        const fontStyle = weightToStyle(styleData.fontWeight || 400);
+                        // Test if the clean font was loaded; use fallback if not
+                        const testKey = `${cleanFamily}::${fontStyle}`;
+                        const actualFamily = loadedFonts.has(testKey) ? cleanFamily : 'Inter';
+                        style.fontName = { family: actualFamily, style: fontStyle };
                         total++;
                     }
                     catch { }
@@ -126,7 +153,17 @@ figma.ui.onmessage = async (msg) => {
             }
             catch { }
         }
-        figma.ui.postMessage({ type: 'done', text: 'Загрузка завершена', count: total });
+        // Send result with font warnings
+        const resultMsg = {
+            type: 'done',
+            text: 'Загрузка завершена',
+            count: total,
+        };
+        if (fontWarnings.length > 0) {
+            resultMsg.fontWarnings = fontWarnings;
+            resultMsg.text += `. Не найдены шрифты: ${fontWarnings.slice(0, 3).join(', ')}`;
+        }
+        figma.ui.postMessage(resultMsg);
         figma.notify(`DSDTF: Создано ${total} стилей`);
         figma.closePlugin();
     }

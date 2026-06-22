@@ -8,6 +8,10 @@
   "editorType": ["figma"],
   "documentAccess": "dynamic-page",
   "networkAccess": {
-    "allowedDomains": ["https://leto117.github.io"]
+    "allowedDomains": [
+      "https://leto117.github.io",
+      "https://fonts.googleapis.com",
+      "https://fonts.gstatic.com"
+    ]
   }
 }

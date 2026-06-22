@@ -101,8 +101,24 @@ body {
 .status .dot.ready { background: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,0.4); }
 .status .dot.busy { background: #f59e0b; box-shadow: 0 0 8px rgba(245,158,11,0.4); animation: pulse 1s infinite; }
 .status .dot.done { background: #3b82f6; box-shadow: 0 0 8px rgba(59,130,246,0.4); }
+.status .dot.warn { background: #ef4444; box-shadow: 0 0 8px rgba(239,68,68,0.4); }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 .status-text { flex: 1; }
+
+/* Font warning section */
+.font-warn {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.2);
+  font-size: 10px;
+  color: rgba(255,255,255,0.6);
+  line-height: 1.4;
+  display: none;
+}
+.font-warn.visible { display: block; }
+.font-warn strong { color: #ef4444; }
 
 /* Buttons */
 .btn-group { width: 100%; display: flex; flex-direction: column; gap: 10px; }
@@ -152,7 +168,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 120px;
+  max-height: 160px;
   overflow-y: auto;
 }
 .file-list::-webkit-scrollbar { width: 3px; }
@@ -169,8 +185,10 @@ body {
   font-size: 10px;
   color: rgba(255,255,255,0.6);
 }
-.file-item .icon { font-size: 12px; opacity: 0.5; }
+.file-item .icon { font-size: 12px; opacity: 0.5; width: 16px; text-align: center; }
 .file-item .name { flex: 1; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.file-item.font { border-left: 2px solid rgba(59,130,246,0.4); }
 
 .fade-in { animation: fadeIn 0.3s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
@@ -199,6 +217,13 @@ body {
   <div class="status" id="status">
     <span class="dot" id="dot"></span>
     <span class="status-text" id="statusText">Ожидание файлов</span>
+  </div>
+
+  <!-- Font warning -->
+  <div class="font-warn" id="fontWarn">
+    <strong>⚠ Шрифты не найдены:</strong><br>
+    <span id="fontWarnText"></span><br>
+    <span style="opacity:0.6;font-size:9px">Установите шрифты вручную из папки fonts/</span>
   </div>
 
   <!-- File List -->
@@ -230,24 +255,32 @@ document.getElementById('btnFolder').addEventListener('click', () => {
   const input = document.createElement('input');
   input.type = 'file';
   input.webkitdirectory = true;
-  input.accept = '.json,.svg';
+  input.accept = '.json,.svg,.ttf,.woff,.woff2';
   input.onchange = (e) => {
     const files = e.target.files;
     if (!files.length) return;
     selectedFiles = {};
     const list = document.getElementById('fileList');
     list.innerHTML = '';
+    let fontCount = 0;
     for (const file of files) {
-      if (!file.name.endsWith('.json') && !file.name.endsWith('.svg')) continue;
+      const isFont = file.name.match(/\.(ttf|woff|woff2)$/i);
+      const isJson = file.name.endsWith('.json');
+      const isSvg = file.name.endsWith('.svg');
+      if (!isFont && !isJson && !isSvg) continue;
       selectedFiles[file.name] = file;
+      if (isFont) fontCount++;
       const div = document.createElement('div');
-      div.className = 'file-item fade-in';
-      div.innerHTML = '<span class="icon">' + (file.name.endsWith('.json') ? '{ }' : '<>') + '</span><span class="name">' + file.name + '</span>';
+      div.className = 'file-item fade-in' + (isFont ? ' font' : '');
+      const icon = isFont ? 'F' : (isJson ? '{ }' : '<>');
+      div.innerHTML = '<span class="icon">' + icon + '</span><span class="name">' + file.name + '</span>';
       list.appendChild(div);
     }
     list.classList.remove('hidden');
     const count = Object.keys(selectedFiles).length;
-    document.getElementById('statusText').textContent = 'Найдено файлов: ' + count;
+    let statusText = 'Найдено файлов: ' + count;
+    if (fontCount > 0) statusText += ' (шрифтов: ' + fontCount + ')';
+    document.getElementById('statusText').textContent = statusText;
     document.getElementById('dot').className = 'dot ready';
     document.getElementById('btnLoad').disabled = false;
   };
@@ -260,12 +293,17 @@ document.getElementById('btnLoad').addEventListener('click', () => {
   btn.disabled = true;
   document.getElementById('statusText').textContent = 'Загрузка в Figma...';
   document.getElementById('dot').className = 'dot busy';
+  document.getElementById('fontWarn').classList.remove('visible');
 
   const readers = Object.entries(selectedFiles).map(([name, file]) =>
     new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = (e) => resolve({ name, content: e.target.result });
-      reader.readAsText(file);
+      if (file.name.match(/\.(ttf|woff|woff2)$/i)) {
+        reader.readAsDataURL(file);
+      } else {
+        reader.readAsText(file);
+      }
     })
   );
 
@@ -281,8 +319,14 @@ window.addEventListener('message', (e) => {
     document.getElementById('statusText').textContent = msg.text;
   }
   if (msg.type === 'done') {
-    document.getElementById('statusText').textContent = 'Готово! Создано стилей: ' + msg.count;
+    let text = 'Готово! Создано стилей: ' + msg.count;
+    document.getElementById('statusText').textContent = text;
     document.getElementById('dot').className = 'dot done';
+    if (msg.fontWarnings && msg.fontWarnings.length > 0) {
+      document.getElementById('fontWarnText').textContent = msg.fontWarnings.slice(0, 5).join(', ');
+      document.getElementById('fontWarn').classList.add('visible');
+      document.getElementById('dot').className = 'dot warn';
+    }
     const btn = document.getElementById('btnLoad');
     btn.classList.remove('loading');
     btn.disabled = false;
