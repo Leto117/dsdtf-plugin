@@ -79,7 +79,7 @@ figma.ui.onmessage = async function (msg) {
     }
 
     // === 2. TEXT STYLES ===
-    var scale = fsData ? fsData.typography : []
+    var scale = fsData && Array.isArray(fsData.typography) ? fsData.typography : []
     if (scale.length === 0 && typography) {
       try {
         var pt2 = JSON.parse(typography.content)
@@ -115,8 +115,11 @@ figma.ui.onmessage = async function (msg) {
       }
     }
     if (!seenFonts['Inter::Bold']) fontReqs.push({ family: 'Inter', style: 'Bold' })
+    if (!seenFonts['Inter::Semi Bold']) fontReqs.push({ family: 'Inter', style: 'Semi Bold' })
+    if (!seenFonts['Inter::Medium']) fontReqs.push({ family: 'Inter', style: 'Medium' })
     if (!seenFonts['Inter::Regular']) fontReqs.push({ family: 'Inter', style: 'Regular' })
     if (!seenFonts['Courier New::Regular']) fontReqs.push({ family: 'Courier New', style: 'Regular' })
+    if (!seenFonts['Courier New::Medium']) fontReqs.push({ family: 'Courier New', style: 'Medium' })
 
     await Promise.all(fontReqs.map(async function (f) {
       try { await figma.loadFontAsync(f) } catch (e) {}
@@ -272,7 +275,7 @@ figma.ui.onmessage = async function (msg) {
 
       figma.ui.postMessage({ type: 'done', text: 'Готово', count: total })
       figma.notify('DSDTF: Создано ' + total + ' стилей + фрейм превью')
-      figma.closePlugin()
+      setTimeout(function () { figma.closePlugin() }, 500)
 
     } catch (e) {
       figma.ui.postMessage({ type: 'error', text: 'Preview: ' + String(e) })
